@@ -138,6 +138,22 @@ def add_cuda_gencodes(cc_flag, archs, bare_metal_version):
     if bare_metal_version >= Version("13.0") and "121" in archs:
         cc_flag += ["-gencode", "arch=compute_121f,code=sm_121"]
 
+    # "121a" (not in upstream #2257 -- zbrad/flash-attention addition): true
+    # architecture-specific SASS for sm_121, as opposed to the family-
+    # generic "121f" above. Unlocks GB10-specific instructions the family
+    # variant doesn't (same "a" vs "f" tradeoff CUDA documents for every
+    # Hopper/Blackwell arch: "a" is faster but only runs on that exact SM,
+    # "f" runs across the whole compute-capability family). Deliberately a
+    # separate opt-in arch code, not folded into "121"'s default handling
+    # above -- that one stays upstream's portable default (a wheel built
+    # with "121f" also runs on other members of the Blackwell 12.x family,
+    # "121a" does not). Matches this fleet's own established convention for
+    # single-owned-hardware tuned builds (zbrad/pytorch's GB10 wheels and
+    # zbrad/flash-attention-vllm's tuned CMakeLists both already build
+    # GB10 as sm_121a, not sm_121f) -- see tuned/devices/gb10.conf.
+    if bare_metal_version >= Version("13.0") and "121a" in archs:
+        cc_flag += ["-gencode", "arch=compute_121a,code=sm_121a"]
+
     # Thor rename: 12.8-12.9 uses sm_101; 13.0+ uses sm_110
     if bare_metal_version >= Version("12.8") and "110" in archs:
         if bare_metal_version >= Version("13.0"):

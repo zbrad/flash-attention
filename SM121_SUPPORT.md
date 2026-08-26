@@ -39,3 +39,33 @@ This is a local cherry-pick, not a PR back to Dao-AILab (#2257 already
 exists and is out of this fork's hands to merge). If #2257 lands upstream,
 a future `git fetch upstream && git rebase upstream/main` on
 `tuned-builds` should drop this commit cleanly (identical diff).
+
+## "121a" addition on top of #2257: architecture-specific, not family-generic
+
+PR #2257 emits `-gencode arch=compute_121f,code=sm_121` -- the "f"
+(family-specific) suffix, portable across every member of the Blackwell
+12.x compute-capability family, not just sm_121 exactly. That's the right
+default for an upstream package that has to run on hardware it can't
+predict in advance.
+
+A **tuned** build knows its exact target ahead of time and gets nothing
+from that portability, only a smaller optimization envelope: the "a"
+(architecture-specific) suffix unlocks instructions/scheduling specific to
+sm_121 that "f" deliberately excludes to stay family-portable. This
+matches the pattern already established elsewhere in this fleet for
+single-owned-hardware tuned builds -- zbrad/pytorch's own GB10 wheels are
+built `sm_121a`, and zbrad/flash-attention-vllm's tuned `CMakeLists.txt`
+targets `12.1a` via `FA2_TUNED_ARCH` for the same reason (see that file's
+own comment on `FA2_TUNED_ARCH`).
+
+Added a second, separate arch code -- `"121a"` -- to
+`add_cuda_gencodes()`, additive on top of (not replacing) #2257's `"121"`
+branch: `-gencode arch=compute_121a,code=sm_121a`. `tuned/devices/gb10.conf`
+requests `"121a"` via `GPU_TUNED_FA_ARCH`; upstream's own default archs
+list (and anyone building this fork with a bare `FLASH_ATTN_CUDA_ARCHS`
+containing `"121"`) is untouched and still gets the portable `121f` build.
+
+Verified before applying: `nvcc -gencode arch=compute_121a,code=sm_121a`
+compiles a trivial `.cu` file successfully against this box's CUDA 13.3
+toolkit (same sanity check as `121f`, run for both before committing to a
+~12-minute single-arch build).

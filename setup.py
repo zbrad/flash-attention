@@ -106,7 +106,12 @@ def add_cuda_gencodes(cc_flag, archs, bare_metal_version):
       - sm_121 on CUDA >= 13.0 (GB10/Spark)
       - Use 100f on CUDA >= 12.9 (Blackwell family-specific)
       - Map requested 110 -> 101 if CUDA < 13.0 (Thor rename)
-      - Embed PTX for newest arch for forward compatibility
+      - sm_121a on CUDA >= 13.0: architecture-specific GB10/Spark, opt-in
+        (zbrad/flash-attention addition, see the "121a" branch below)
+      - Embed PTX for newest arch for forward compatibility, unless
+        FLASH_ATTN_NO_PTX=TRUE (zbrad/flash-attention addition -- tuned
+        builds set this so the extension can never silently JIT onto an
+        untuned SM)
     """
     # Always-regular 80
     if "80" in archs:
@@ -162,11 +167,25 @@ def add_cuda_gencodes(cc_flag, archs, bare_metal_version):
             # Provide Thor support for CUDA 12.8-12.9 via sm_101
             cc_flag += ["-gencode", "arch=compute_101,code=sm_101"]
 
-    # PTX for newest requested arch (forward-compat)
-    numeric = [a for a in archs if a.isdigit()]
-    if numeric:
-        newest = max(numeric, key=int)
-        cc_flag += ["-gencode", f"arch=compute_{newest},code=compute_{newest}"]
+    # PTX for newest requested arch (forward-compat).
+    #
+    # FLASH_ATTN_NO_PTX (zbrad/flash-attention addition, not upstream):
+    # skip this entirely. A tuned single-arch build (see tuned/env.sh,
+    # which always sets this) wants ONLY the real SASS gencode(s) added
+    # above -- embedding PTX means the extension *can* still load and run
+    # via driver JIT on a different SM than it was tuned for, silently
+    # defeating the whole point of a tuned build (wrong-arch JIT-compiled
+    # code, or a multi-minute first-call JIT stall, instead of a hard
+    # failure that says "rebuild for your actual GPU"). Relying on an
+    # arch code merely not being ".isdigit()" (e.g. "121a") to dodge this
+    # block is an accident, not a guarantee -- plain-digit codes like "80"
+    # or "120" (rtx40/rtx50) would still silently get a PTX gencode added
+    # here without this explicit opt-out.
+    if os.getenv("FLASH_ATTN_NO_PTX", "FALSE") != "TRUE":
+        numeric = [a for a in archs if a.isdigit()]
+        if numeric:
+            newest = max(numeric, key=int)
+            cc_flag += ["-gencode", f"arch=compute_{newest},code=compute_{newest}"]
 
     return cc_flag
 

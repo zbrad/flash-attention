@@ -64,6 +64,12 @@ export FLASH_ATTN_CUDA_ARCHS="${GPU_TUNED_FA_ARCH}"
 # Force a real compile -- setup.py's CachedWheelsCommand otherwise tries a
 # prebuilt-wheel download first (wrong arch for any of these variants).
 export FLASH_ATTENTION_FORCE_BUILD=TRUE
+# No PTX, no JIT fallback -- a tuned build only ever runs on the exact GPU
+# it was built for; embedding forward-compat PTX would let it silently
+# JIT onto a different SM instead of failing loudly. See setup.py's
+# add_cuda_gencodes() comment on this flag (zbrad/flash-attention-only
+# addition, not upstream).
+export FLASH_ATTN_NO_PTX=TRUE
 
 echo "[tuned/env] GPU_TUNED_VARIANT=${GPU_TUNED_VARIANT} FLASH_ATTN_CUDA_ARCHS=${FLASH_ATTN_CUDA_ARCHS} CUDA_HOME=${CUDA_HOME:-<unset>}"
 
